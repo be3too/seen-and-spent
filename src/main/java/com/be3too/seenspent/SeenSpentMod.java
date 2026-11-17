@@ -67,7 +67,7 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer player = handler.getPlayer();
-            String name = player.getGameProfile().getName();
+            String name = player.getGameProfile().name();
             long now = System.currentTimeMillis();
 
             ACTIVE_SESSIONS.put(player.getUUID(), now);
@@ -102,7 +102,7 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
             dispatcher.register(Commands.literal("playtime")
                 .executes(context -> {
                     ServerPlayer self = context.getSource().getPlayerOrException();
-                    return executePlaytime(context, self.getGameProfile().getName());
+                    return executePlaytime(context, self.getGameProfile().name());
                 })
                 .then(Commands.literal("top")
                     .executes(this::executeTop)
@@ -116,7 +116,7 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
     }
 
     private void closeSession(ServerPlayer player) {
-        String name = player.getGameProfile().getName();
+        String name = player.getGameProfile().name();
         long now = System.currentTimeMillis();
         Long joinTime = ACTIVE_SESSIONS.remove(player.getUUID());
         long sessionDuration = (joinTime != null) ? Math.max(0L, now - joinTime) : 0L;
@@ -149,7 +149,7 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
         String formattedPlaytime = formatDuration(Duration.ofMillis(totalMillis));
 
         if (onlinePlayer != null) {
-            String realName = onlinePlayer.getGameProfile().getName();
+            String realName = onlinePlayer.getGameProfile().name();
             Long joinTime = ACTIVE_SESSIONS.get(onlinePlayer.getUUID());
             String joinedStr = (joinTime != null) ? FORMATTER.format(Instant.ofEpochMilli(joinTime)) : "Unknown";
             String sessionAgo = (joinTime != null)
@@ -194,7 +194,7 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
             return 0;
         }
 
-        String displayName = (onlinePlayer != null) ? onlinePlayer.getGameProfile().getName() : data.name;
+        String displayName = (onlinePlayer != null) ? onlinePlayer.getGameProfile().name() : data.name;
         long totalMillis = getTotalPlaytime(server, targetName);
         String formattedPlaytime = formatDuration(Duration.ofMillis(totalMillis));
 
@@ -216,8 +216,9 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
 
         long now = System.currentTimeMillis();
         for (ServerPlayer online : server.getPlayerList().getPlayers()) {
-            String key = online.getGameProfile().getName().toLowerCase();
-            displayNames.put(key, online.getGameProfile().getName());
+            String realName = online.getGameProfile().name();
+            String key = realName.toLowerCase();
+            displayNames.put(key, realName);
             Long joinTime = ACTIVE_SESSIONS.get(online.getUUID());
             long currentSession = (joinTime != null) ? Math.max(0L, now - joinTime) : 0L;
             totals.merge(key, currentSession, Long::sum);
@@ -246,7 +247,9 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
     }
 
     private CompletableFuture<Suggestions> suggestPlayers(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
-        context.getSource().getServer().getPlayerNames().forEach(builder::suggest);
+        for (String onlineName : context.getSource().getServer().getPlayerNames()) {
+            builder.suggest(onlineName);
+        }
         PLAYER_CACHE.values().forEach(data -> builder.suggest(data.name));
         return builder.buildFuture();
     }
