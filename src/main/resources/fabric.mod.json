@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "seenspent",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "name": "Seen & Spent",
   "description": "Tracks when players last joined, last left, total server playtime, and a playtime leaderboard.",
   "authors": ["be3too"],
