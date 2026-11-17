@@ -47,6 +47,10 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
     private static final Map<String, PlayerData> PLAYER_CACHE = new ConcurrentHashMap<>();
     private static final Map<UUID, Long> ACTIVE_SESSIONS = new ConcurrentHashMap<>();
 
+    private enum Lang {
+        EN, RU, ES
+    }
+
     public static class PlayerData {
         public String name;
         public long lastJoinEpochMilli;
@@ -114,6 +118,15 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
             );
         });
     }
+    private Lang getLang(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return Lang.EN;
+        String code = player.clientInformation().language();
+        if (code == null) return Lang.EN;
+        if (code.startsWith("ru") || code.startsWith("be") || code.startsWith("uk")) return Lang.RU;
+        if (code.startsWith("es")) return Lang.ES;
+        return Lang.EN;
+    }
 
     private void closeSession(ServerPlayer player) {
         String name = player.getGameProfile().name();
@@ -141,71 +154,123 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
         }
         return total;
     }
+
     private int executeSeen(CommandContext<CommandSourceStack> context, String targetName) {
-        MinecraftServer server = context.getSource().getServer();
+        CommandSourceStack source = context.getSource();
+        Lang lang = getLang(source);
+        MinecraftServer server = source.getServer();
         ServerPlayer onlinePlayer = server.getPlayerList().getPlayerByName(targetName);
         PlayerData data = PLAYER_CACHE.get(targetName.toLowerCase());
         long totalMillis = getTotalPlaytime(server, targetName);
-        String formattedPlaytime = formatDuration(Duration.ofMillis(totalMillis));
+        String formattedPlaytime = formatDuration(Duration.ofMillis(totalMillis), lang);
 
         if (onlinePlayer != null) {
             String realName = onlinePlayer.getGameProfile().name();
             Long joinTime = ACTIVE_SESSIONS.get(onlinePlayer.getUUID());
-            String joinedStr = (joinTime != null) ? FORMATTER.format(Instant.ofEpochMilli(joinTime)) : "Unknown";
+            String unknownStr = switch (lang) {
+                case RU -> "Неизвестно";
+                case ES -> "Desconocido";
+                default -> "Unknown";
+            };
+            String zeroStr = switch (lang) {
+                case RU -> "0м";
+                default -> "0m";
+            };
+            String joinedStr = (joinTime != null) ? FORMATTER.format(Instant.ofEpochMilli(joinTime)) : unknownStr;
             String sessionAgo = (joinTime != null)
-                    ? formatDuration(Duration.between(Instant.ofEpochMilli(joinTime), Instant.now()))
-                    : "0m";
+                    ? formatDuration(Duration.between(Instant.ofEpochMilli(joinTime), Instant.now()), lang)
+                    : zeroStr;
 
-            context.getSource().sendSuccess(() -> Component.literal(
-                "\u00a7aPlayer \u00a7e" + realName + " \u00a7ais currently online!\n" +
-                "\u00a77Last joined: \u00a7f" + joinedStr + " \u00a78(" + sessionAgo + " ago)\n" +
-                "\u00a77Total playtime: \u00a7b" + formattedPlaytime
-            ), false);
+            String msg = switch (lang) {
+                case RU -> "\u00a7aИгрок \u00a7e" + realName + " \u00a7aсейчас в сети!\n" +
+                           "\u00a77Последний вход: \u00a7f" + joinedStr + " \u00a78(" + sessionAgo + " назад)\n" +
+                           "\u00a77Всего наиграно: \u00a7b" + formattedPlaytime;
+                case ES -> "\u00a7a\u00a1El jugador \u00a7e" + realName + " \u00a7aest\u00e1 en l\u00ednea!\n" +
+                           "\u00a77\u00daltima conexi\u00f3n: \u00a7f" + joinedStr + " \u00a78(hace " + sessionAgo + ")\n" +
+                           "\u00a77Tiempo total jugado: \u00a7b" + formattedPlaytime;
+                default -> "\u00a7aPlayer \u00a7e" + realName + " \u00a7ais currently online!\n" +
+                           "\u00a77Last joined: \u00a7f" + joinedStr + " \u00a78(" + sessionAgo + " ago)\n" +
+                           "\u00a77Total playtime: \u00a7b" + formattedPlaytime;
+            };
+
+            source.sendSuccess(() -> Component.literal(msg), false);
             return 1;
         }
 
         if (data == null) {
-            context.getSource().sendFailure(Component.literal("\u00a7cNo records found for player \u00a7e" + targetName + "\u00a7c."));
+            String err = switch (lang) {
+                case RU -> "\u00a7cДанные об игроке \u00a7e" + targetName + " \u00a7cне найдены.";
+                case ES -> "\u00a7cNo se encontraron registros del jugador \u00a7e" + targetName + "\u00a7c.";
+                default -> "\u00a7cNo records found for player \u00a7e" + targetName + "\u00a7c.";
+            };
+            source.sendFailure(Component.literal(err));
             return 0;
         }
 
+        String unknownStr = switch (lang) {
+            case RU -> "Неизвестно";
+            case ES -> "Desconocido";
+            default -> "Unknown";
+        };
         String lastJoinDate = (data.lastJoinEpochMilli > 0)
                 ? FORMATTER.format(Instant.ofEpochMilli(data.lastJoinEpochMilli))
-                : "Unknown";
+                : unknownStr;
         String lastSeenDate = FORMATTER.format(Instant.ofEpochMilli(data.lastSeenEpochMilli));
-        String timeAgo = formatDuration(Duration.between(Instant.ofEpochMilli(data.lastSeenEpochMilli), Instant.now()));
+        String timeAgo = formatDuration(Duration.between(Instant.ofEpochMilli(data.lastSeenEpochMilli), Instant.now()), lang);
 
-        context.getSource().sendSuccess(() -> Component.literal(
-            "\u00a77Player \u00a7e" + data.name + " \u00a77is \u00a7coffline\u00a77.\n" +
-            "\u00a77Last joined: \u00a7f" + lastJoinDate + "\n" +
-            "\u00a77Last seen: \u00a7f" + lastSeenDate + " \u00a78(" + timeAgo + " ago)\n" +
-            "\u00a77Total playtime: \u00a7b" + formattedPlaytime
-        ), false);
+        String msg = switch (lang) {
+            case RU -> "\u00a77Игрок \u00a7e" + data.name + " \u00a77сейчас \u00a7cне в сети\u00a77.\n" +
+                       "\u00a77Последний вход: \u00a7f" + lastJoinDate + "\n" +
+                       "\u00a77Последний выход: \u00a7f" + lastSeenDate + " \u00a78(" + timeAgo + " назад)\n" +
+                       "\u00a77Всего наиграно: \u00a7b" + formattedPlaytime;
+            case ES -> "\u00a77El jugador \u00a7e" + data.name + " \u00a77est\u00e1 \u00a7cdesconectado\u00a77.\n" +
+                       "\u00a77\u00daltima conexi\u00f3n: \u00a7f" + lastJoinDate + "\n" +
+                       "\u00a77Visto por \u00faltima vez: \u00a7f" + lastSeenDate + " \u00a78(hace " + timeAgo + ")\n" +
+                       "\u00a77Tiempo total jugado: \u00a7b" + formattedPlaytime;
+            default -> "\u00a77Player \u00a7e" + data.name + " \u00a77is \u00a7coffline\u00a77.\n" +
+                       "\u00a77Last joined: \u00a7f" + lastJoinDate + "\n" +
+                       "\u00a77Last seen: \u00a7f" + lastSeenDate + " \u00a78(" + timeAgo + " ago)\n" +
+                       "\u00a77Total playtime: \u00a7b" + formattedPlaytime;
+        };
+
+        source.sendSuccess(() -> Component.literal(msg), false);
         return 1;
     }
-
     private int executePlaytime(CommandContext<CommandSourceStack> context, String targetName) {
-        MinecraftServer server = context.getSource().getServer();
+        CommandSourceStack source = context.getSource();
+        Lang lang = getLang(source);
+        MinecraftServer server = source.getServer();
         ServerPlayer onlinePlayer = server.getPlayerList().getPlayerByName(targetName);
         PlayerData data = PLAYER_CACHE.get(targetName.toLowerCase());
 
         if (onlinePlayer == null && data == null) {
-            context.getSource().sendFailure(Component.literal("\u00a7cNo records found for player \u00a7e" + targetName + "\u00a7c."));
+            String err = switch (lang) {
+                case RU -> "\u00a7cДанные об игроке \u00a7e" + targetName + " \u00a7cне найдены.";
+                case ES -> "\u00a7cNo se encontraron registros del jugador \u00a7e" + targetName + "\u00a7c.";
+                default -> "\u00a7cNo records found for player \u00a7e" + targetName + "\u00a7c.";
+            };
+            source.sendFailure(Component.literal(err));
             return 0;
         }
 
         String displayName = (onlinePlayer != null) ? onlinePlayer.getGameProfile().name() : data.name;
         long totalMillis = getTotalPlaytime(server, targetName);
-        String formattedPlaytime = formatDuration(Duration.ofMillis(totalMillis));
+        String formattedPlaytime = formatDuration(Duration.ofMillis(totalMillis), lang);
 
-        context.getSource().sendSuccess(() -> Component.literal(
-            "\u00a77Total playtime for \u00a7e" + displayName + "\u00a77: \u00a7b" + formattedPlaytime
-        ), false);
+        String msg = switch (lang) {
+            case RU -> "\u00a77Время игрока \u00a7e" + displayName + " \u00a77на сервере: \u00a7b" + formattedPlaytime;
+            case ES -> "\u00a77Tiempo total de \u00a7e" + displayName + "\u00a77: \u00a7b" + formattedPlaytime;
+            default -> "\u00a77Total playtime for \u00a7e" + displayName + "\u00a77: \u00a7b" + formattedPlaytime;
+        };
+
+        source.sendSuccess(() -> Component.literal(msg), false);
         return 1;
     }
 
     private int executeTop(CommandContext<CommandSourceStack> context) {
-        MinecraftServer server = context.getSource().getServer();
+        CommandSourceStack source = context.getSource();
+        Lang lang = getLang(source);
+        MinecraftServer server = source.getServer();
         Map<String, Long> totals = new HashMap<>();
         Map<String, String> displayNames = new HashMap<>();
 
@@ -225,24 +290,34 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
         }
 
         if (totals.isEmpty()) {
-            context.getSource().sendFailure(Component.literal("\u00a7cNo playtime records found yet."));
+            String err = switch (lang) {
+                case RU -> "\u00a7cСтатистика времени пока пуста.";
+                case ES -> "\u00a7cA\u00fan no hay registros de tiempo jugado.";
+                default -> "\u00a7cNo playtime records found yet.";
+            };
+            source.sendFailure(Component.literal(err));
             return 0;
         }
 
         List<Map.Entry<String, Long>> sorted = new ArrayList<>(totals.entrySet());
         sorted.sort(Map.Entry.comparingByValue(Comparator.reverseOrder()));
 
-        StringBuilder sb = new StringBuilder("\u00a76\u00a7l=== Top Playtime Leaderboard ===");
+        String header = switch (lang) {
+            case RU -> "\u00a76\u00a7l=== Топ игроков по времени на сервере ===";
+            case ES -> "\u00a76\u00a7l=== Clasificaci\u00f3n de tiempo jugado ===";
+            default -> "\u00a76\u00a7l=== Top Playtime Leaderboard ===";
+        };
+        StringBuilder sb = new StringBuilder(header);
         int limit = Math.min(10, sorted.size());
         for (int i = 0; i < limit; i++) {
             Map.Entry<String, Long> entry = sorted.get(i);
             String name = displayNames.getOrDefault(entry.getKey(), entry.getKey());
-            String timeStr = formatDuration(Duration.ofMillis(entry.getValue()));
+            String timeStr = formatDuration(Duration.ofMillis(entry.getValue()), lang);
             sb.append("\n\u00a7e#").append(i + 1).append(" \u00a7f").append(name).append(" \u00a77- \u00a7b").append(timeStr);
         }
 
         String message = sb.toString();
-        context.getSource().sendSuccess(() -> Component.literal(message), false);
+        source.sendSuccess(() -> Component.literal(message), false);
         return 1;
     }
 
@@ -275,13 +350,19 @@ public class SeenSpentMod implements DedicatedServerModInitializer {
         }
     }
 
-    private String formatDuration(Duration duration) {
+    private String formatDuration(Duration duration, Lang lang) {
         long days = duration.toDays();
         long hours = duration.toHoursPart();
         long minutes = duration.toMinutesPart();
 
-        if (days > 0) return days + "d " + hours + "h " + minutes + "m";
-        if (hours > 0) return hours + "h " + minutes + "m";
-        return Math.max(1, minutes) + "m";
+        if (lang == Lang.RU) {
+            if (days > 0) return days + "д " + hours + "ч " + minutes + "м";
+            if (hours > 0) return hours + "ч " + minutes + "м";
+            return Math.max(1, minutes) + "м";
+        } else {
+            if (days > 0) return days + "d " + hours + "h " + minutes + "m";
+            if (hours > 0) return hours + "h " + minutes + "m";
+            return Math.max(1, minutes) + "m";
+        }
     }
 }
