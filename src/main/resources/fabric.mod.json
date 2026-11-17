@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "seenspent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Seen & Spent",
   "description": "Tracks when players last joined, last left, total server playtime, and a playtime leaderboard.",
   "authors": ["be3too"],
@@ -12,8 +12,8 @@
     ]
   },
   "depends": {
-    "fabricloader": ">=0.19.5",
-    "minecraft": "~26.3",
+    "fabricloader": ">=0.18.0",
+    "minecraft": ">=26.1 <=26.3",
     "fabric-api": "*"
   }
 }
